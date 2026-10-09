@@ -1,38 +1,56 @@
-using Microsoft.AspNetCore.Mvc;
-using MediLink.Services;
+using MediLink.Common;
 using MediLink.DTOs;
+using MediLink.Interfaces;
+using Microsoft.AspNetCore.Mvc;
 
-namespace MediLink.Controllers
+namespace MediLink.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]   // /api/consultas
+public class ConsultasController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class ConsultasController : ControllerBase
+    private readonly IConsultaService _servicio;
+
+    public ConsultasController(IConsultaService servicio)
     {
-        private readonly IConsultaService _consultaService;
+        _servicio = servicio;
+    }
 
-        public ConsultasController(IConsultaService consultaService)
+    // GET /api/consultas
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<IEnumerable<ConsultaReadDto>>>> GetTodas()
+    {
+        var consultas = await _servicio.GetTodasAsync();
+        return Ok(ApiResponse<IEnumerable<ConsultaReadDto>>.Ok(consultas, "Consultas obtenidas correctamente."));
+    }
+
+    // GET /api/consultas/5
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ApiResponse<ConsultaReadDto>>> GetPorId(int id)
+    {
+        var consulta = await _servicio.GetPorIdAsync(id);
+
+        if (consulta is null)
+            return NotFound(ApiResponse<ConsultaReadDto>.Fail($"No existe la consulta con id {id}."));
+
+        return Ok(ApiResponse<ConsultaReadDto>.Ok(consulta, "Consulta obtenida correctamente."));
+    }
+
+    // POST /api/consultas
+    [HttpPost]
+    public async Task<ActionResult<ApiResponse<ConsultaReadDto>>> Crear([FromBody] ConsultaCreateDto dto)
+    {
+        try
         {
-            _consultaService = consultaService;
+            var creada = await _servicio.CrearAsync(dto);
+
+            // 201 Created + header Location con la URI del recurso nuevo
+            return CreatedAtAction(nameof(GetPorId), new { id = creada.Id },
+                ApiResponse<ConsultaReadDto>.Ok(creada, "Consulta registrada correctamente."));
         }
-
-        // POST /api/consultas
-        [HttpPost]
-        public async Task<IActionResult> CrearConsulta([FromBody] CrearConsultaDto dto)
+        catch (ArgumentException ex)   // médico o paciente inexistente
         {
-            var consulta = await _consultaService.CrearConsultaAsync(dto);
-            if (consulta == null) return BadRequest("No se pudo crear la consulta.");
-
-            return CreatedAtAction(nameof(ObtenerPorId), new { id = consulta.Id }, consulta);
-        }
-
-        // GET /api/consultas/{id}
-        [HttpGet("{id}")]
-        public async Task<IActionResult> ObtenerPorId(int id)
-        {
-            var consulta = await _consultaService.ObtenerPorIdAsync(id);
-            if (consulta == null) return NotFound(new { mensaje = "Consulta no encontrada." });
-
-            return Ok(consulta);
+            return BadRequest(ApiResponse<ConsultaReadDto>.Fail(ex.Message));
         }
     }
 }

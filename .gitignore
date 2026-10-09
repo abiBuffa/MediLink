@@ -480,3 +480,8 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+medilink.db
+medilink.db-shm
+medilink.db-wal
+bin/
+obj/

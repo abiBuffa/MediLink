@@ -1,80 +1,128 @@
-using MediLink.Models;
+using MediLink.Data;
 using MediLink.DTOs;
-using MediLink.Clients;
-using Microsoft.Extensions.Logging;
+using MediLink.Interfaces;
+using MediLink.Models;
+using Microsoft.EntityFrameworkCore;
 
-namespace MediLink.Services
+namespace MediLink.Services;
+
+public class RecetaService : IRecetaService
 {
-    public interface IRecetaService
+    private readonly MediLinkDbContext _db;
+    private readonly IFarmaciaClient _farmacia;   // depende de la INTERFAZ, no de la clase concreta
+    private readonly ILogger<RecetaService> _logger;
+
+    public RecetaService(MediLinkDbContext db, IFarmaciaClient farmacia, ILogger<RecetaService> logger)
     {
-        Task<Receta?> EmitirRecetaAsync(int consultaId, CrearRecetaDto dto);
-        Task<Receta?> ObtenerEstadoAsync(string codigo);
+        _db = db;
+        _farmacia = farmacia;
+        _logger = logger;
     }
 
-    public class RecetaService : IRecetaService
+    public async Task<RecetaEmitidaDto> EmitirAsync(int consultaId, RecetaCreateDto dto)
     {
-        private static readonly List<Receta> _recetas = new();
-        private readonly IConsultaService _consultaService;
-        private readonly IFarmaciaClient _farmaciaClient;
-        private readonly ILogger<RecetaService> _logger;
+        // 1) Criterio de aceptación: solo se emiten recetas desde consultas registradas.
+        //    KeyNotFoundException = el recurso de la URL no existe (el controlador responde 404).
+        var consulta = await _db.Consultas
+            .Include(c => c.Medico)
+            .Include(c => c.Paciente)
+            .FirstOrDefaultAsync(c => c.Id == consultaId);
 
-        public RecetaService(
-            IConsultaService consultaService, 
-            IFarmaciaClient farmaciaClient, 
-            ILogger<RecetaService> logger)
+        if (consulta is null)
+            throw new KeyNotFoundException(
+                $"No existe la consulta {consultaId}. Solo se pueden emitir recetas desde consultas registradas.");
+
+        // 2) Armamos la receta: código único, fecha de emisión, vencimiento y estado Activa.
+        var ahora = DateTime.UtcNow;
+        var receta = new Receta
         {
-            _consultaService = consultaService;
-            _farmaciaClient = farmaciaClient;
-            _logger = logger;
+            Codigo = await GenerarCodigoUnicoAsync(),
+            Consulta = consulta,
+            FechaEmision = ahora,
+            FechaVencimiento = ahora.AddDays(dto.DiasValidez),
+            Estado = EstadoReceta.Activa,
+            Medicamentos = dto.Medicamentos
+        };
+
+        _db.Recetas.Add(receta);
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Receta {Codigo} emitida desde la consulta {ConsultaId}",
+            receta.Codigo, consultaId);
+
+        // 3) Avisamos a la farmacia. Si falla NO deshacemos la receta: ya existe y la
+        //    farmacia puede validarla igual. Solo dejamos constancia en el log.
+        bool notificada;
+        try
+        {
+            notificada = await _farmacia.NotificarRecetaAsync(receta);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Falló la notificación de la receta {Codigo} a la farmacia", receta.Codigo);
+            notificada = false;
         }
 
-        public async Task<Receta?> EmitirRecetaAsync(int consultaId, CrearRecetaDto dto)
+        if (!notificada)
+            _logger.LogWarning("La farmacia no confirmó la receta {Codigo}", receta.Codigo);
+
+        return new RecetaEmitidaDto { Receta = ToDto(receta), FarmaciaNotificada = notificada };
+    }
+
+    public async Task<RecetaReadDto?> GetPorCodigoAsync(string codigo)
+    {
+        var receta = await RecetasConDatos().FirstOrDefaultAsync(r => r.Codigo == codigo);
+
+        if (receta is null)
+            return null;   // el controlador lo traduce a 404
+
+        // Estado "vencida": si sigue Activa pero ya pasó la fecha, la actualizamos al consultarla.
+        if (receta.Estado == EstadoReceta.Activa && receta.FechaVencimiento < DateTime.UtcNow)
         {
-            var consulta = await _consultaService.ObtenerPorIdAsync(consultaId);
-            if (consulta == null)
-            {
-                _logger.LogWarning("Intento fallido de emisión de receta. Consulta ID {ConsultaId} no encontrada.", consultaId);
-                return null;
-            }
-
-            string codigoGenerado = $"RX-{Guid.NewGuid():N}"[..11].ToUpper();
-            var fechaEmision = DateTime.UtcNow;
-            var fechaVencimiento = fechaEmision.AddDays(30);
-
-            var receta = new Receta
-            {
-                Id = _recetas.Count + 1,
-                ConsultaId = consultaId,
-                Codigo = codigoGenerado,
-                FechaEmision = fechaEmision,
-                FechaVencimiento = fechaVencimiento,
-                Medicamentos = dto.Medicamentos,
-                Estado = EstadoReceta.Activa
-            };
-
-            _recetas.Add(receta);
-
-            _logger.LogInformation("RECETA EMITIDA | Código: {Codigo} | Emisión: {FechaEmision} | Vencimiento: {FechaVencimiento}", 
-                codigoGenerado, fechaEmision, fechaVencimiento);
-
-            await _farmaciaClient.NotificarRecetaAsync(codigoGenerado, dto.Medicamentos);
-
-            return receta;
+            receta.Estado = EstadoReceta.Vencida;
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Receta {Codigo} marcada como Vencida", codigo);
         }
 
-        public Task<Receta?> ObtenerEstadoAsync(string codigo)
+        return ToDto(receta);
+    }
+
+    // Genera "RX-" + 8 caracteres de un Guid, y repite si por casualidad ya existe.
+    private async Task<string> GenerarCodigoUnicoAsync()
+    {
+        string codigo;
+        do
         {
-            var receta = _recetas.FirstOrDefault(r => r.Codigo.Equals(codigo, StringComparison.OrdinalIgnoreCase));
-            if (receta == null) return Task.FromResult<Receta?>(null);
-
-            if (receta.Estado == EstadoReceta.Activa && DateTime.UtcNow > receta.FechaVencimiento)
-            {
-                receta.Estado = EstadoReceta.Vencida;
-                _logger.LogInformation("RECETA VENCIDA AUTOMÁTICAMENTE | Código: {Codigo} | Fecha Vencimiento: {FechaVencimiento}", 
-                    receta.Codigo, receta.FechaVencimiento);
-            }
-
-            return Task.FromResult<Receta?>(receta);
+            codigo = "RX-" + Guid.NewGuid().ToString("N")[..8].ToUpper();
         }
+        while (await _db.Recetas.AnyAsync(r => r.Codigo == codigo));
+
+        return codigo;
+    }
+
+    // Trae la receta junto con su consulta, médico y paciente (las navegaciones vienen vacías por defecto).
+    private IQueryable<Receta> RecetasConDatos()
+        => _db.Recetas
+            .Include(r => r.Consulta).ThenInclude(c => c!.Medico)
+            .Include(r => r.Consulta).ThenInclude(c => c!.Paciente);
+
+    // Convierte la entidad en el DTO de salida.
+    private static RecetaReadDto ToDto(Receta r)
+    {
+        var paciente = r.Consulta?.Paciente;
+        var medico = r.Consulta?.Medico;
+
+        return new RecetaReadDto
+        {
+            Codigo = r.Codigo,
+            ConsultaId = r.ConsultaId,
+            Paciente = paciente is null ? "" : $"{paciente.Nombre} {paciente.Apellido}",
+            Medico = medico?.Nombre ?? "",
+            Medicamentos = r.Medicamentos,
+            FechaEmision = r.FechaEmision,
+            FechaVencimiento = r.FechaVencimiento,
+            Estado = r.Estado.ToString(),
+            FechaDispensacion = r.FechaDispensacion
+        };
     }
 }
