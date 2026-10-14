@@ -13,9 +13,8 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IConsultaService, ConsultaService>();
 builder.Services.AddScoped<IRecetaService, RecetaService>();
 
-// TEMPORAL: FarmaciaClientFalso hasta que Guille haga el FarmaciaClient real.
-// Cuando esté, se cambia por: AddScoped<IFarmaciaClient, FarmaciaClient>();
-builder.Services.AddScoped<IFarmaciaClient, FarmaciaClientFalso>();
+// Cliente HTTP Real de la Farmacia
+builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>();
 
 builder.Services.AddDbContext<MediLinkDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=medilink.db"));
