@@ -1,9 +1,13 @@
 using MediLink.Data;
+using MediLink.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+
+builder.Services.AddScoped<MedicoService>();
+builder.Services.AddScoped<PacienteService>();
 
 // Configuración del DbContext para SQLite
 builder.Services.AddDbContext<MediLinkDbContext>(options =>
