@@ -2,6 +2,7 @@ using MediLink.Clients;
 using MediLink.Common;
 using MediLink.Data;
 using MediLink.DTOs;
+using MediLink.Interfaces;
 using MediLink.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -56,19 +57,12 @@ public class ReposicionService : IReposicionService
         // 3) Llamar a PharmaLink con manejo de fallas
         try
         {
-            var respuesta = await _farmacia.SolicitarInsumosAsync(new SolicitudInsumosRequest
-            {
-                PedidoId = pedido.Id,
-                InsumoId = insumo.Id,
-                NombreInsumo = insumo.Nombre,
-                Cantidad = pedido.Cantidad,
-                FechaPedido = pedido.FechaPedido
-            }, ct);
+            var respuesta = await _farmacia.SolicitarInsumosAsync(insumo.Nombre, pedido.Cantidad);
 
             pedido.FechaRespuesta = DateTime.UtcNow;
             pedido.RespuestaFarmacia = respuesta.Mensaje;
 
-            if (respuesta.Aceptado)
+            if (respuesta.Confirmado)
             {
                 pedido.Estado = EstadoPedido.Enviado;
                 pedido.CodigoEnvio = respuesta.CodigoEnvio;

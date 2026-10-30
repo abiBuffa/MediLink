@@ -19,7 +19,7 @@ public class FarmaciaClient : IFarmaciaClient
         _configuration = configuration;
         _logger = logger;
 
-        var baseUrl = _configuration["PharmaLink:BaseUrl"] ?? "https://localhost:7001";
+        var baseUrl = _configuration["PharmaLink:BaseUrl"] ?? "http://localhost:5050";
         var apiKey = _configuration["PharmaLink:ApiKey"] ?? "MediLink-Secret-Key-2026";
 
         _httpClient.BaseAddress = new Uri(baseUrl);
@@ -62,53 +62,80 @@ public class FarmaciaClient : IFarmaciaClient
         }
     }
 
+    /// <summary>
+    /// Pide insumos a PharmaLink.
+    /// - Si PharmaLink responde (acepta o rechaza) -> devuelve RespuestaReposicion.
+    /// - Si PharmaLink está caída, da timeout o error 5xx -> lanza FarmaciaNoDisponibleException,
+    ///   para que ReposicionService marque el pedido como Fallido y responda 503.
+    /// </summary>
     public async Task<RespuestaReposicion> SolicitarInsumosAsync(string nombreInsumo, int cantidad)
     {
+        var payload = new
+        {
+            insumo = nombreInsumo,
+            cantidad = cantidad
+        };
+
+        var jsonContent = new StringContent(
+            JsonSerializer.Serialize(payload),
+            Encoding.UTF8,
+            "application/json"
+        );
+
+        HttpResponseMessage response;
         try
         {
-            var payload = new
-            {
-                insumo = nombreInsumo,
-                cantidad = cantidad
-            };
-
-            var jsonContent = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8,
-                "application/json"
-            );
-
             _logger.LogInformation("Solicitando reposición de {Cantidad}x {Insumo} a PharmaLink...", cantidad, nombreInsumo);
-            var response = await _httpClient.PostAsync("/api/reposiciones", jsonContent);
+            response = await _httpClient.PostAsync("/api/reposiciones", jsonContent);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "No se pudo conectar con PharmaLink al solicitar insumos.");
+            throw new FarmaciaNoDisponibleException("No se pudo conectar con PharmaLink.", ex);
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "PharmaLink no respondió a tiempo (timeout) al solicitar insumos.");
+            throw new FarmaciaNoDisponibleException("PharmaLink no respondió a tiempo (timeout).", ex);
+        }
 
-            if (response.IsSuccessStatusCode)
-            {
-                var responseStream = await response.Content.ReadAsStreamAsync();
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var resultado = await JsonSerializer.DeserializeAsync<RespuestaReposicion>(responseStream, options);
+        // Error del lado de PharmaLink (500, 502, 503...) = servicio no disponible
+        if ((int)response.StatusCode >= 500)
+        {
+            _logger.LogError("PharmaLink devolvió error {StatusCode} al solicitar insumos.", response.StatusCode);
+            throw new FarmaciaNoDisponibleException($"PharmaLink devolvió error {(int)response.StatusCode}.");
+        }
 
-                _logger.LogInformation("Solicitud de reposición de {Insumo} procesada por PharmaLink.", nombreInsumo);
-                return resultado ?? new RespuestaReposicion
-                {
-                    Confirmado = false,
-                    Mensaje = "Respuesta vacía recibida desde PharmaLink."
-                };
-            }
-
+        if (!response.IsSuccessStatusCode)
+        {
             _logger.LogWarning("PharmaLink rechazó la solicitud de insumos con estado {StatusCode}.", response.StatusCode);
             return new RespuestaReposicion
             {
                 Confirmado = false,
-                Mensaje = "PharmaLink rechazó la solicitud de insumos."
+                Mensaje = $"PharmaLink rechazó la solicitud de insumos ({(int)response.StatusCode})."
             };
         }
-        catch (Exception ex)
+
+        try
         {
-            _logger.LogError(ex, "Error de conexión con PharmaLink al solicitar insumos.");
+            var responseStream = await response.Content.ReadAsStreamAsync();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var resultado = await JsonSerializer.DeserializeAsync<RespuestaReposicion>(responseStream, options);
+
+            _logger.LogInformation("Solicitud de reposición de {Insumo} procesada por PharmaLink.", nombreInsumo);
+            return resultado ?? new RespuestaReposicion
+            {
+                Confirmado = false,
+                Mensaje = "Respuesta vacía recibida desde PharmaLink."
+            };
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "PharmaLink devolvió una respuesta con formato inválido.");
             return new RespuestaReposicion
             {
                 Confirmado = false,
-                Mensaje = $"Error de comunicación con PharmaLink: {ex.Message}"
+                Mensaje = "Respuesta de PharmaLink con formato inválido."
             };
         }
     }

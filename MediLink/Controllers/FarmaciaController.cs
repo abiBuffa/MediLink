@@ -1,4 +1,4 @@
-using MediLink.Common;
+using MediLink.DTOs;
 using MediLink.Data;
 using MediLink.Models;
 using Microsoft.AspNetCore.Mvc;

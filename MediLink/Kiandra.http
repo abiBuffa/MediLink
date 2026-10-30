@@ -1,5 +1,7 @@
-@host = http://localhost:5000
-# Cambiá el puerto por el que figura en Properties/launchSettings.json
+@host = http://localhost:5144
+@apiKey = compilaDeMilagro123
+# Puerto según Properties/launchSettings.json (perfil http).
+# /api/reposiciones está protegida: lleva el header X-API-Key.
 
 ### 1. Crear insumo -> 201
 POST {{host}}/api/insumos
@@ -48,9 +50,10 @@ Content-Type: application/json
 ### 7. Stock bajo -> 200
 GET {{host}}/api/insumos/stock-bajo
 
-### 8. Pedido de reposición -> 201 (farmacia OK) o 503 (farmacia caída, queda Fallido)
+### 8. Pedido de reposición -> 201 (FarmaciaMock corriendo) o 503 (FarmaciaMock apagada -> Fallido)
 POST {{host}}/api/reposiciones
 Content-Type: application/json
+X-API-Key: {{apiKey}}
 
 {
   "insumoId": 1,
@@ -60,6 +63,7 @@ Content-Type: application/json
 ### 9. Pedido con cantidad 0 -> 400
 POST {{host}}/api/reposiciones
 Content-Type: application/json
+X-API-Key: {{apiKey}}
 
 {
   "insumoId": 1,
@@ -69,14 +73,26 @@ Content-Type: application/json
 ### 10. Pedido con insumo inexistente -> 404
 POST {{host}}/api/reposiciones
 Content-Type: application/json
+X-API-Key: {{apiKey}}
 
 {
   "insumoId": 999,
   "cantidad": 10
 }
 
-### 11. Listar pedidos -> 200
-GET {{host}}/api/reposiciones
+### 11. Pedido SIN API Key -> 401
+POST {{host}}/api/reposiciones
+Content-Type: application/json
 
-### 12. Pedido por id -> 200 / 404
+{
+  "insumoId": 1,
+  "cantidad": 10
+}
+
+### 12. Listar pedidos -> 200
+GET {{host}}/api/reposiciones
+X-API-Key: {{apiKey}}
+
+### 13. Pedido por id -> 200 / 404
 GET {{host}}/api/reposiciones/1
+X-API-Key: {{apiKey}}

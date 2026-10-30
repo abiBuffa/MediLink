@@ -1,12 +1,11 @@
 using MediLink.Clients;
-
-using MediLink.Common;
->>>>>>> origin/feature/kiandra-insumos
 using MediLink.Data;
+using MediLink.DTOs;
+using MediLink.Interfaces;
+using MediLink.Middleware;
 using MediLink.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using MediLink.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,40 +26,37 @@ builder.Services.AddControllers()
         };
     });
 
-
-// Configuración del DbContext para SQLite
-
-// Inyección de dependencias
-builder.Services.AddScoped<IConsultaService, ConsultaService>();
-builder.Services.AddScoped<IRecetaService, RecetaService>();
-
-// Cliente HTTP Real de la Farmacia
-builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>();
-
-origin/feature/integracion-farmacia
+// Base de datos SQLite
 builder.Services.AddDbContext<MediLinkDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=medilink.db"));
+
+// --- Anael: Pacientes y Médicos ---
+builder.Services.AddScoped<PacienteService>();
+builder.Services.AddScoped<MedicoService>();
+
+// --- Abi: Consultas y Recetas ---
+builder.Services.AddScoped<IConsultaService, ConsultaService>();
+builder.Services.AddScoped<IRecetaService, RecetaService>();
 
 // --- Kiandra: Insumos y Reposición ---
 builder.Services.AddScoped<IInsumoService, InsumoService>();
 builder.Services.AddScoped<IReposicionService, ReposicionService>();
 
-// ⚠️ TEMPORAL hasta que Guille registre el cliente real:
-// builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>(...);
-// Cuando eso exista, borrar esta línea.
-builder.Services.AddScoped<IFarmaciaClient, FarmaciaClientTemporal>();
+// --- Guille: Cliente HTTP real de PharmaLink (Typed Client) ---
+// URL base y X-API-Key se leen de appsettings.json (sección "PharmaLink").
+builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10); // si PharmaLink no responde en 10 s -> pedido Fallido (503)
+});
 
 var app = builder.Build();
 
+// --- Sol: Middlewares (el de errores primero, para que atrape todo) ---
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
- HEAD
 
 app.Run();
-
-app.Run();
- origin/feature/kiandra-insumos
