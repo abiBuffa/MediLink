@@ -1,0 +1,82 @@
+@host = http://localhost:5000
+# Cambiá el puerto por el que figura en Properties/launchSettings.json
+
+### 1. Crear insumo -> 201
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "Guantes de látex",
+  "stockActual": 5,
+  "stockMinimo": 20
+}
+
+### 2. Crear insumo duplicado -> 409
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "guantes de látex",
+  "stockActual": 10,
+  "stockMinimo": 5
+}
+
+### 3. Crear insumo inválido -> 400
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "",
+  "stockActual": -3,
+  "stockMinimo": 5
+}
+
+### 4. Listar insumos -> 200
+GET {{host}}/api/insumos
+
+### 5. Insumo por id -> 200 / 404
+GET {{host}}/api/insumos/1
+
+### 6. Actualizar stock -> 200
+PUT {{host}}/api/insumos/1/stock
+Content-Type: application/json
+
+{
+  "stockActual": 3
+}
+
+### 7. Stock bajo -> 200
+GET {{host}}/api/insumos/stock-bajo
+
+### 8. Pedido de reposición -> 201 (farmacia OK) o 503 (farmacia caída, queda Fallido)
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+
+{
+  "insumoId": 1,
+  "cantidad": 50
+}
+
+### 9. Pedido con cantidad 0 -> 400
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+
+{
+  "insumoId": 1,
+  "cantidad": 0
+}
+
+### 10. Pedido con insumo inexistente -> 404
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+
+{
+  "insumoId": 999,
+  "cantidad": 10
+}
+
+### 11. Listar pedidos -> 200
+GET {{host}}/api/reposiciones
+
+### 12. Pedido por id -> 200 / 404
+GET {{host}}/api/reposiciones/1
