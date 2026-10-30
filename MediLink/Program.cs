@@ -7,7 +7,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
+
 // Configuración del DbContext para SQLite
+
+// Inyección de dependencias
+builder.Services.AddScoped<IConsultaService, ConsultaService>();
+builder.Services.AddScoped<IRecetaService, RecetaService>();
+
+// Cliente HTTP Real de la Farmacia
+builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>();
+
+origin/feature/integracion-farmacia
 builder.Services.AddDbContext<MediLinkDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=medilink.db"));
 
