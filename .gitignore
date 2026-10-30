@@ -485,3 +485,4 @@ medilink.db-shm
 medilink.db-wal
 bin/
 obj/
+.vscode/
