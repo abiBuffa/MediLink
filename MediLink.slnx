@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="FarmaciaMock/FarmaciaMock.csproj" />
   <Project Path="MediLink/MediLink.csproj" />
 </Solution>
