@@ -6,8 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MediLink.Controllers;
 
+/// <summary>
+/// Alta y consulta de médicos.
+/// </summary>
 [ApiController]
 [Route("api/medicos")]
+[Produces("application/json")]
 public class MedicosController : ControllerBase
 {
     private readonly MedicoService _service;
@@ -17,7 +21,14 @@ public class MedicosController : ControllerBase
         _service = service;
     }
 
+    /// <summary>
+    /// Registra un nuevo médico en el sistema.
+    /// </summary>
+    /// <remarks> La matrícula del médico debe ser única. Si ya existe responde 409</remarks>
     [HttpPost]
+    [ProducesResponseType(typeof(ApiResponse<Medico>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<Dictionary<string, string[]>>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ApiResponse<Medico>>> Crear(
         [FromBody] MedicoDTO dto)
     {
@@ -42,7 +53,11 @@ public class MedicosController : ControllerBase
                 medico));
     }
 
+    /// <summary>
+    /// Lista todos los médicos
+    /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(ApiResponse<List<Medico>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<List<Medico>>>> ObtenerTodos()
     {
         var medicos = await _service.ObtenerTodosAsync();
@@ -53,7 +68,14 @@ public class MedicosController : ControllerBase
             medicos));
     }
 
+    /// <summary>
+    /// Obtiene un médico por su ID.
+    /// </summary>
+    /// <param name="id">Identificador del médico</param>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(ApiResponse<Medico>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<Medico>>> ObtenerPorId(int id)
     {
         if (id <= 0)

@@ -3,6 +3,7 @@ using MediLink.Data;
 using MediLink.DTOs;
 using MediLink.Interfaces;
 using MediLink.Middleware;
+using MediLink.OpenApi;
 using MediLink.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,11 @@ builder.Services.AddControllers()
                 ApiResponse<Dictionary<string, string[]>>.Fail("Datos inválidos.", errores));
         };
     });
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer<ApiKeySecuritySchemeTransformer>();
+    options.AddOperationTransformer<ApiKeyOperationTransformer>();
+});
 
 // Base de datos SQLite
 builder.Services.AddDbContext<MediLinkDbContext>(options =>
@@ -50,7 +56,14 @@ builder.Services.AddHttpClient<IFarmaciaClient, FarmaciaClient>(client =>
 });
 
 var app = builder.Build();
-
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();                                   // JSON en /openapi/v1.json
+    app.UseSwaggerUI(options =>                         // Interfaz en /swagger
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "MediLink v1");
+    });
+}
 // --- Sol: Middlewares (el de errores primero, para que atrape todo) ---
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
