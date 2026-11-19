@@ -28,7 +28,7 @@ public class RecetasController : ControllerBase
     /// </remarks>
     /// <param name="consultaId">Id de la consulta de origen.</param>
     /// <param name="dto">Medicamentos y días de validez (por defecto 30).</param>
-    [HttpPost("~/api/consultas/{consultaId}/recetas")]
+    [HttpPost("~/api/consultas/{consultaId:int}/recetas")]
     [ProducesResponseType(typeof(ApiResponse<RecetaEmitidaDto>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<Dictionary<string, string[]>>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]

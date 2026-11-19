@@ -35,7 +35,7 @@ public class ConsultasController : ControllerBase
     /// Obtiene una consulta médica por su ID.
     /// </summary>
     /// <param name="id">Identificador de la consulta</param>
-    [HttpGet("{id}")]
+    [HttpGet(("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<ConsultaReadDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<ConsultaReadDto>), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<ConsultaReadDto>>> GetPorId(int id)
