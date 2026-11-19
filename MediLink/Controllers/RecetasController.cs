@@ -1,4 +1,3 @@
-
 using MediLink.DTOs;
 using MediLink.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -34,7 +33,7 @@ public class RecetasController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<Dictionary<string, string[]>>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<RecetaEmitidaDto>), StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<ApiResponse<RecetaEmitidaDto>>> Emitir(
+    public async Task<ActionResult<ApiResponse<RecetaEmitidaDto>>> Emitir(
         int consultaId, [FromBody] RecetaCreateDto dto)
     {
         try
@@ -45,7 +44,7 @@ public class RecetasController : ControllerBase
                 ? "Receta emitida y notificada a la farmacia."
                 : "Receta emitida, pero no se pudo notificar a la farmacia.";
 
-            return CreatedAtAction(nameof(GetPorCodigo), new { codigo = emitida.Receta.Codigo },
+            return CreatedAtAction(nameof(GetPorCodigo), new { codigoReceta = emitida.Receta.Codigo },
                 ApiResponse<RecetaEmitidaDto>.Ok(emitida, mensaje));
         }
         catch (KeyNotFoundException ex)   // la consulta no existe
@@ -55,20 +54,39 @@ public class RecetasController : ControllerBase
     }
 
     /// <summary>
-    /// Obtiene una receta por su código.
+    /// Valida y obtiene una receta por su código para integración con PharmaLink.
     /// </summary>
-    /// <remarks>Si la receta seguía Activa pero ya pasó su fecha de vencimiento, se marca como Vencida.</remarks>
-    /// <param name="codigo">Código de la receta, por ejemplo: RX-1A2B3C4D</param>
-    [HttpGet("{codigo}")]
-    [ProducesResponseType(typeof(ApiResponse<RecetaReadDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<RecetaReadDto>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<RecetaReadDto>>> GetPorCodigo(string codigo)
+    /// <param name="codigoReceta">Código de la receta, por ejemplo: RX-1A2B3C4D</param>
+    [HttpGet("{codigoReceta}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPorCodigo(string codigoReceta)
     {
-        var receta = await _servicio.GetPorCodigoAsync(codigo);
+        var receta = await _servicio.GetPorCodigoAsync(codigoReceta);
 
         if (receta is null)
-            return NotFound(ApiResponse<RecetaReadDto>.Fail($"No existe la receta con código {codigo}."));
+        {
+            return NotFound(new
+            {
+                esValida = false,
+                codigoReceta = codigoReceta,
+                medicamentoId = 0,
+                cantidadPrescripta = 0,
+                mensaje = $"No existe la receta con código {codigoReceta}."
+            });
+        }
 
-        return Ok(ApiResponse<RecetaReadDto>.Ok(receta, "Receta obtenida correctamente."));
+        bool esActiva = string.Equals(receta.Estado.ToString(), "Activa", StringComparison.OrdinalIgnoreCase);
+
+        return Ok(new
+        {
+            esValida = esActiva,
+            codigoReceta = receta.Codigo,
+            medicamentoId = 1,
+            cantidadPrescripta = 1,
+            mensaje = esActiva
+                ? $"Receta activa y autorizada ({receta.Medicamentos})"
+                : $"La receta no es válida para dispensar (Estado actual: {receta.Estado})"
+        });
     }
 }
