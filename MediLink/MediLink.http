@@ -1,6 +1,308 @@
-@MediLink_HostAddress = http://localhost:5144
+@host = http://localhost:5144
+@apiKey = compilaDeMilagro123
+# Puerto según Properties/launchSettings.json (perfil http).
+# Ejecutar en orden, con la base vacía (los ids asumen que arranca en 1).
+# Para ver "Enviado" en reposiciones, FarmaciaMock tiene que estar corriendo (puerto 5050).
 
-GET {{MediLink_HostAddress}}/weatherforecast/
-Accept: application/json
+# PACIENTES
+
+### 1. Crear paciente -> 201
+POST {{host}}/api/pacientes
+Content-Type: application/json
+
+{
+  "nombre": "Ana",
+  "apellido": "Pérez",
+  "documento": "12345678",
+  "fechaNacimiento": "1990-05-14",
+  "correo": "ana@mail.com"
+}
+
+### 2. Crear paciente con documento duplicado -> 409
+POST {{host}}/api/pacientes
+Content-Type: application/json
+
+{
+  "nombre": "Otra",
+  "apellido": "Persona",
+  "documento": "12345678",
+  "fechaNacimiento": "1985-01-01",
+  "correo": "otra@mail.com"
+}
+
+### 3. Crear paciente inválido (sin nombre, correo mal) -> 400
+POST {{host}}/api/pacientes
+Content-Type: application/json
+
+{
+  "nombre": "",
+  "apellido": "Pérez",
+  "documento": "999",
+  "fechaNacimiento": "1990-05-14",
+  "correo": "no-es-un-correo"
+}
+
+### 4. Listar pacientes -> 200
+GET {{host}}/api/pacientes
+
+### 5. Paciente por id -> 200
+GET {{host}}/api/pacientes/1
+
+### 6. Paciente inexistente -> 404
+GET {{host}}/api/pacientes/999
+
+# MÉDICOS
+
+### 7. Crear médico -> 201
+POST {{host}}/api/medicos
+Content-Type: application/json
+
+{
+  "nombre": "Dr. Juan Gómez",
+  "matricula": "MP-4521",
+  "especialidad": "Cardiología"
+}
+
+### 8. Crear médico con matrícula duplicada -> 409
+POST {{host}}/api/medicos
+Content-Type: application/json
+
+{
+  "nombre": "Dra. Otra",
+  "matricula": "MP-4521",
+  "especialidad": "Pediatría"
+}
+
+### 9. Listar médicos -> 200
+GET {{host}}/api/medicos
+
+### 10. Médico por id -> 200
+GET {{host}}/api/medicos/1
+
+### 11. Médico inexistente -> 404
+GET {{host}}/api/medicos/999
+
+# CONSULTAS
+
+### 12. Crear consulta -> 201
+POST {{host}}/api/consultas
+Content-Type: application/json
+
+{
+  "medicoId": 1,
+  "pacienteId": 1,
+  "diagnostico": "Hipertensión leve",
+  "observaciones": "Control en 30 días"
+}
+
+### 13. Consulta con médico inexistente -> 400
+POST {{host}}/api/consultas
+Content-Type: application/json
+
+{
+  "medicoId": 999,
+  "pacienteId": 1,
+  "diagnostico": "Prueba",
+  "observaciones": "Prueba"
+}
+
+### 14. Listar consultas -> 200
+GET {{host}}/api/consultas
+
+### 15. Consulta por id -> 200
+GET {{host}}/api/consultas/1
+
+### 16. Consulta inexistente -> 404
+GET {{host}}/api/consultas/999
+
+# RECETAS (emitir requiere API Key)
+
+### 17. Emitir receta -> 201 (guarda el código para los pasos siguientes)
+# @name emitirReceta
+POST {{host}}/api/consultas/1/recetas
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "medicamentos": "Enalapril 10mg cada 12 hs",
+  "diasValidez": 30
+}
 
 ###
+@codigoReceta = {{emitirReceta.response.body.$.data.receta.codigo}}
+
+### 18. Emitir receta SIN API Key -> 401
+POST {{host}}/api/consultas/1/recetas
+Content-Type: application/json
+
+{
+  "medicamentos": "Ibuprofeno 400mg",
+  "diasValidez": 10
+}
+
+### 19. Emitir receta desde consulta inexistente -> 404
+POST {{host}}/api/consultas/999/recetas
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "medicamentos": "Ibuprofeno 400mg",
+  "diasValidez": 10
+}
+
+### 20. Emitir receta sin medicamentos -> 400
+POST {{host}}/api/consultas/1/recetas
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "medicamentos": "",
+  "diasValidez": 30
+}
+
+### 21. Consultar estado de la receta -> 200
+GET {{host}}/api/recetas/{{codigoReceta}}
+
+### 22. Receta inexistente -> 404
+GET {{host}}/api/recetas/RX-NOEXISTE
+
+# FARMACIA: validar y dispensar (requieren API Key)
+
+### 23. Validar receta -> 200
+POST {{host}}/api/farmacia/recetas/{{codigoReceta}}/validar
+X-API-Key: {{apiKey}}
+
+### 24. Validar receta inexistente -> 404
+POST {{host}}/api/farmacia/recetas/RX-NOEXISTE/validar
+X-API-Key: {{apiKey}}
+
+### 25. Validar SIN API Key -> 401
+POST {{host}}/api/farmacia/recetas/{{codigoReceta}}/validar
+
+### 26. Dispensar receta -> 200
+POST {{host}}/api/farmacia/recetas/{{codigoReceta}}/dispensar
+X-API-Key: {{apiKey}}
+
+### 27. Dispensar otra vez -> 409
+POST {{host}}/api/farmacia/recetas/{{codigoReceta}}/dispensar
+X-API-Key: {{apiKey}}
+
+### 28. Validar una receta ya dispensada -> 400
+POST {{host}}/api/farmacia/recetas/{{codigoReceta}}/validar
+X-API-Key: {{apiKey}}
+
+### 29. Ver estado final de la receta (Dispensada) -> 200
+GET {{host}}/api/recetas/{{codigoReceta}}
+
+# INSUMOS
+
+### 30. Crear insumo -> 201
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "Guantes de látex",
+  "stockActual": 5,
+  "stockMinimo": 20
+}
+
+### 31. Crear insumo duplicado -> 409
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "guantes de látex",
+  "stockActual": 10,
+  "stockMinimo": 5
+}
+
+### 32. Crear insumo inválido -> 400
+POST {{host}}/api/insumos
+Content-Type: application/json
+
+{
+  "nombre": "",
+  "stockActual": -3,
+  "stockMinimo": 5
+}
+
+### 33. Listar insumos -> 200
+GET {{host}}/api/insumos
+
+### 34. Insumo por id -> 200 / 404
+GET {{host}}/api/insumos/1
+
+### 35. Actualizar stock -> 200
+PUT {{host}}/api/insumos/1/stock
+Content-Type: application/json
+
+{
+  "stockActual": 3
+}
+
+### 36. Stock bajo -> 200
+GET {{host}}/api/insumos/stock-bajo
+
+# REPOSICIONES (requieren API Key)
+
+### 37. Pedido de reposición -> 201 (FarmaciaMock corriendo) o 503 (apagada -> Fallido)
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "insumoId": 1,
+  "cantidad": 50
+}
+
+### 38. Pedido que la farmacia rechaza (más de 1000 unidades) -> 201 con estado Rechazado
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "insumoId": 1,
+  "cantidad": 2000
+}
+
+### 39. Pedido con cantidad 0 -> 400
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "insumoId": 1,
+  "cantidad": 0
+}
+
+### 40. Pedido con insumo inexistente -> 404
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "insumoId": 999,
+  "cantidad": 10
+}
+
+### 41. Pedido SIN API Key -> 401
+POST {{host}}/api/reposiciones
+Content-Type: application/json
+
+{
+  "insumoId": 1,
+  "cantidad": 10
+}
+
+### 42. Listar pedidos -> 200
+GET {{host}}/api/reposiciones
+X-API-Key: {{apiKey}}
+
+### 43. Pedido por id -> 200 / 404
+GET {{host}}/api/reposiciones/1
+X-API-Key: {{apiKey}}
+
+# VISTA CONSOLIDADA (desafío adicional)
+
+### 44. Vista de pedidos con estado y respuesta de la farmacia -> 200
+GET {{host}}/api/vista/pedidos
