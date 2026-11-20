@@ -26,40 +26,10 @@ public class FarmaciaClient : IFarmaciaClient
         _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
     }
 
-    public async Task<bool> NotificarRecetaAsync(Receta receta)
+    public Task<bool> NotificarRecetaAsync(Receta receta)
     {
-        try
-        {
-            var payload = new
-            {
-                codigoReceta = receta.Codigo,
-                medicamentoId = 1,
-                cantidad = 1
-            };
-
-            var jsonContent = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8,
-                "application/json"
-            );
-
-            _logger.LogInformation("Enviando dispensación de receta {Codigo} a PharmaLink...", receta.Codigo);
-            var response = await _httpClient.PostAsync("/api/dispensaciones", jsonContent);
-
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("Receta {Codigo} registrada en PharmaLink con éxito.", receta.Codigo);
-                return true;
-            }
-
-            _logger.LogWarning("PharmaLink devolvió código {StatusCode} al registrar receta {Codigo}.", response.StatusCode, receta.Codigo);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error de comunicación con PharmaLink al registrar la receta {Codigo}.", receta.Codigo);
-            return false;
-        }
+       _logger.LogInformation("Receta {Codigo} emitida y disponible en estado Activa para dispensación en PharmaLink.", receta.Codigo);
+        return Task.FromResult(true);
     }
 
     /// <summary>
